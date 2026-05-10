@@ -1460,6 +1460,14 @@ async function handleMessage(message: TelegramMessage): Promise<void> {
     }
 
     if (result.exitCode !== 0) {
+      // DIAG: dump stderr/stdout previews on any non-zero exit so we can see why claude died
+      const errPreview = (result.stderr ?? "").slice(-2000);
+      const outPreview = (result.stdout ?? "").slice(-1000);
+      console.error(`[Telegram] EXIT-${result.exitCode} ${label}:`
+        + ` stderr.len=${(result.stderr ?? "").length}`
+        + ` stdout.len=${(result.stdout ?? "").length}`
+        + `\n  stderr.tail=${JSON.stringify(errPreview)}`
+        + `\n  stdout.tail=${JSON.stringify(outPreview)}`);
       const isTimedOut = result.exitCode === 124;
       const errorMsg = isTimedOut
         ? `⏱ Request timed out — the subprocess took too long and was killed. Try again or split into smaller steps.`
@@ -1492,6 +1500,28 @@ async function handleMessage(message: TelegramMessage): Promise<void> {
       }
       // Whether the response is directive-only (attachment is the output, text is empty)
       const isDirectiveOnly = !cleanedText && (buttonRows || filePaths.length > 0 || voicePaths.length > 0 || hadVoiceDirective);
+
+      // DIAG: empty-response trace — fires whenever cleanedText is empty so we can see what got stripped
+      if (!cleanedText) {
+        const raw = result.stdout ?? "";
+        const preview = (s: string) => s.replace(/\s+/g, " ").slice(0, 200);
+        console.error(`[Telegram] EMPTY-TRACE ${label}:`
+          + ` raw.len=${raw.length}`
+          + ` afterReact.len=${afterReact.length}`
+          + ` afterVoice.len=${afterVoice.length}`
+          + ` afterFile.len=${afterFile.length}`
+          + ` cleanedText.len=${cleanedText.length}`
+          + ` reactionEmoji=${reactionEmoji ?? "-"}`
+          + ` voicePaths=${voicePaths.length}`
+          + ` filePaths=${filePaths.length}`
+          + ` buttonRows=${buttonRows ? "yes" : "no"}`
+          + ` hadVoiceDirective=${hadVoiceDirective}`
+          + ` isDirectiveOnly=${isDirectiveOnly}`
+          + ` streamMsgId=${streamMsgId ?? "-"}`
+          + ` hadToolLines=${hadToolLines}`
+          + ` raw.preview=${JSON.stringify(preview(raw))}`
+          + ` afterFile.preview=${JSON.stringify(preview(afterFile))}`);
+      }
 
       if (buttonRows) {
         // Delete the stream preview before sending the button message — the
